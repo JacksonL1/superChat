@@ -12,6 +12,7 @@ requests>=2.31.0
 
 # 工具依赖
 python-dotenv>=1.0.0
+PyYAML>=6.0.0
 
 # 开发依赖
 # pytest>=7.4.0
