@@ -1,6 +1,6 @@
 # SuperChat
 
-SGLang + ClawHub Skills，支持多维度会话隔离的智能对话系统。
+SGLang + ClawHub Skills，支持基于 session_id 隔离的智能对话系统。
 
 ## 功能特性
 
