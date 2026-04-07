@@ -48,10 +48,18 @@ def get_manager() -> SessionManager:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global _session_manager
 
+    headers = settings.sglang_headers_dict.copy()
+    api_key = settings.effective_api_key
+    # 兼容需要 Bearer Token 的网关（例如 ModelScope OpenAI 兼容接口）
+    if api_key != "EMPTY" and "Authorization" not in headers:
+        headers["Authorization"] = f"Bearer {api_key}"
+    if api_key == "EMPTY":
+        log.warning("SGLANG_API_KEY / MODELSCOPE_API_TOKEN 未设置，将以无鉴权模式启动。")
+
     client = AsyncOpenAI(
-        api_key="EMPTY",
+        api_key=api_key,
         base_url=settings.sglang_base_url,
-        default_headers=settings.sglang_headers_dict,
+        default_headers=headers,
     )
 
     # 模型名：优先用环境变量，否则从 SGLang /v1/models 获取

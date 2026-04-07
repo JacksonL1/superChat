@@ -8,8 +8,9 @@ import asyncio
 from pathlib import Path
 from typing import AsyncIterator
 from contextlib import asynccontextmanager
+from config import settings
 
-DB_PATH = Path("data/openclaw.db")
+DB_PATH = Path(settings.db_path)
 
 _CREATE_TABLES = """
 PRAGMA journal_mode=WAL;

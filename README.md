@@ -1,10 +1,10 @@
 # SuperChat
 
-SGLang + ClawHub Skills，支持多维度会话隔离的智能对话系统。
+SGLang + ClawHub Skills，支持基于 session_id 隔离的智能对话系统。
 
 ## 功能特性
 
-- **多维度会话隔离**：基于 workspace_id + agent_id + sender_id + session_id 四元组
+- **会话隔离**：基于 session_id 的独立 Agent 会话
 - **工具调用**：支持执行各种技能脚本
 - **Gateway 服务**：提供 HTTP API 和 SSE 流式输出
 - **飞书机器人集成**：支持飞书消息卡片
@@ -17,14 +17,11 @@ SGLang + ClawHub Skills，支持多维度会话隔离的智能对话系统。
 SuperChat/
 ├── agent/           # Agent 执行引擎
 ├── gateway/         # Gateway 服务（HTTP API + SSE）
-├── session/         # 会话管理
 ├── store/           # 数据存储（SQLite）
 ├── skills/          # 技能库
 ├── lark_bot/        # 飞书机器人
 ├── messaging/       # 消息传递
-├── routers/         # API 路由
-├── models/          # 数据模型
-├── main.py          # FastAPI 应用入口
+├── store/session_store.py  # 会话与消息持久化
 ├── config.py        # 配置管理
 ├── cli.py           # 命令行工具
 └── .env             # 环境变量
@@ -46,6 +43,10 @@ pip install -r requirements.txt
 # SGLang
 SGLANG_BASE_URL=http://localhost:8000/v1
 SGLANG_MODEL=default
+# 需要鉴权时填写（优先）
+SGLANG_API_KEY=
+# 兼容 ModelScope Token（SGLANG_API_KEY 留空时生效）
+MODELSCOPE_API_TOKEN=
 SGLANG_HEADERS={"Content-Type": "application/json"}
 
 # Skills
@@ -76,7 +77,7 @@ curl http://localhost:8000/health
 ```bash
 curl -X POST http://localhost:8000/chat \
   -H "Content-Type: application/json" \
-  -d '{"workspace_id": "test", "agent_id": "test_agent", "sender_id": "test_user", "session_id": "test_session", "message": "你好"}'
+  -d '{"session_id": "main", "message": "你好"}'
 ```
 
 ### 5. 使用命令行工具
@@ -136,6 +137,8 @@ python cli.py reset [session_id]
 
 - **SGLANG_BASE_URL**：SGLang API 基础 URL
 - **SGLANG_MODEL**：使用的模型名称
+- **SGLANG_API_KEY**：网关鉴权 Token（优先）
+- **MODELSCOPE_API_TOKEN**：ModelScope Token（兼容字段）
 - **SGLANG_HEADERS**：API 请求头（JSON 格式）
 - **SKILLS_DIR**：技能目录路径
 - **DB_PATH**：SQLite 数据库路径
@@ -150,13 +153,10 @@ python cli.py reset [session_id]
 
 - **agent/**：Agent 执行引擎，处理工具调用和 LLM 交互
 - **gateway/**：Gateway 服务，提供 HTTP API 和 SSE 流式输出
-- **session/**：会话管理，处理会话的创建、获取和消息存储
-- **store/**：数据存储，使用 SQLite 持久化数据
+- **store/**：数据存储，使用 SQLite 持久化数据（会话与消息由 `store/session_store.py` 负责）
 - **skills/**：技能库，包含各种可执行技能
 - **lark_bot/**：飞书机器人，处理飞书消息交互
 - **messaging/**：消息传递，实现 Agent 间通信
-- **routers/**：API 路由，定义 HTTP 接口
-- **models/**：数据模型，定义请求和响应结构
 
 ### 添加新技能
 
