@@ -20,11 +20,13 @@ import os
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from config import settings
+from gateway.auth import require_auth
+from security.input_filter import inspect_external_input
 from gateway.session_manager import SessionManager
 from store.session_store import load_history, clear_history
 
@@ -102,7 +104,7 @@ class ChatResponse(BaseModel):
 # ════════════════════════════════════════════════════════════════
 
 @app.get("/health")
-async def health():
+async def health(_claims: dict = Depends(require_auth)):
     mgr = get_manager()
     return {
         "status": "ok",
@@ -111,8 +113,12 @@ async def health():
 
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, _claims: dict = Depends(require_auth)):
     """异步接口：投入队列立即返回，结果通过 SSE 推送。"""
+    scan = inspect_external_input(req.message)
+    if not scan.allowed:
+        raise HTTPException(status_code=400, detail=f"输入风控拦截（score={scan.risk_score}）：{scan.reason}")
+
     mgr = get_manager()
     await mgr.send_to_session(req.session_id, req.message)
     return ChatResponse(session_id=req.session_id)
@@ -132,13 +138,17 @@ class SyncChatResponse(BaseModel):
 
 
 @app.post("/chat/sync", response_model=SyncChatResponse)
-async def chat_sync(req: SyncChatRequest):
+async def chat_sync(req: SyncChatRequest, _claims: dict = Depends(require_auth)):
     """
     同步接口：发消息后阻塞等待 AgentLoop 完成，直接返回回复文字。
     飞书 bot 等需要同步回复的调用方使用此接口。
     sender_id 不为空时用 sender_id 作为 session_id，实现多用户隔离。
     """
     import time
+    scan = inspect_external_input(req.message)
+    if not scan.allowed:
+        raise HTTPException(status_code=400, detail=f"输入风控拦截（score={scan.risk_score}）：{scan.reason}")
+
     mgr = get_manager()
     effective_session = req.sender_id if req.sender_id else req.session_id
     await mgr.ensure_session(effective_session, role="main")
@@ -198,7 +208,7 @@ async def chat_sync(req: SyncChatRequest):
 
 
 @app.get("/stream/{session_id}")
-async def stream(session_id: str, request: Request):
+async def stream(session_id: str, request: Request, _claims: dict = Depends(require_auth)):
     """
     SSE 订阅：实时接收 session 的输出。
     每条 SSE 事件格式：data: {"session_id": "...", "text": "...", "progress": bool}
@@ -233,18 +243,18 @@ async def stream(session_id: str, request: Request):
 
 
 @app.get("/sessions")
-async def get_sessions():
+async def get_sessions(_claims: dict = Depends(require_auth)):
     mgr = get_manager()
     return await mgr.get_all_sessions()
 
 
 @app.get("/sessions/{session_id}/history")
-async def get_history(session_id: str):
+async def get_history(session_id: str, _claims: dict = Depends(require_auth)):
     history = await load_history(session_id)
     return {"session_id": session_id, "messages": history}
 
 
 @app.post("/sessions/{session_id}/reset")
-async def reset_session(session_id: str):
+async def reset_session(session_id: str, _claims: dict = Depends(require_auth)):
     await clear_history(session_id)
     return {"session_id": session_id, "status": "reset"}
