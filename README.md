@@ -121,7 +121,7 @@ SGLANG_HEADERS={"Content-Type":"application/json"}
 SKILLS_DIR=./skills
 
 # ===== SQLite =====
-DB_PATH=./data/openclaw.db
+DB_PATH=./data/superChat.db
 
 # ===== Agent =====
 MAX_TOOL_ROUNDS=15

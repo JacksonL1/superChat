@@ -80,7 +80,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     log.info("Gateway shutdown")
 
 
-app = FastAPI(title="OpenClaw-PY Gateway", lifespan=lifespan)
+app = FastAPI(title="superChat-PY Gateway", lifespan=lifespan)
 
 
 # ════════════════════════════════════════════════════════════════

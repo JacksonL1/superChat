@@ -1,11 +1,11 @@
 """
 cli.py
 命令行入口。支持：
-  openclaw chat "消息内容"          ← 发消息并等待输出
-  openclaw sessions                 ← 列出所有 session
-  openclaw history [session_id]     ← 查看消息历史
-  openclaw reset [session_id]       ← 重置 session 历史
-  openclaw serve                    ← 启动 Gateway 服务
+  superChat chat "消息内容"          ← 发消息并等待输出
+  superChat sessions                 ← 列出所有 session
+  superChat history [session_id]     ← 查看消息历史
+  superChat reset [session_id]       ← 重置 session 历史
+  superChat serve                    ← 启动 Gateway 服务
 """
 
 from __future__ import annotations
@@ -114,7 +114,7 @@ def cmd_serve(host: str = "0.0.0.0", port: int = 8000) -> None:
 # ════════════════════════════════════════════════════════════════
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="openclaw", description="OpenClaw-PY CLI")
+    parser = argparse.ArgumentParser(prog="superChat", description="superChat-PY CLI")
     sub    = parser.add_subparsers(dest="cmd")
 
     # chat
