@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 from typing import Iterable
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, BadRequestError
 
 from config import settings
 from store.db import get_db
+
+logger = logging.getLogger(__name__)
+_embedding_unavailable_reason: str | None = None
 
 
 def _cosine_similarity(v1: Iterable[float], v2: Iterable[float]) -> float:
@@ -24,7 +28,9 @@ def _cosine_similarity(v1: Iterable[float], v2: Iterable[float]) -> float:
 
 
 async def build_embedding(client: AsyncOpenAI, text: str) -> list[float] | None:
-    if not settings.embedding_enabled:
+    global _embedding_unavailable_reason
+
+    if not settings.embedding_enabled or _embedding_unavailable_reason:
         return None
 
     payload = (text or "").strip()
@@ -38,6 +44,16 @@ async def build_embedding(client: AsyncOpenAI, text: str) -> list[float] | None:
             input=payload,
         )
         return list(resp.data[0].embedding)
+    except BadRequestError as exc:
+        _embedding_unavailable_reason = "bad_request"
+        logger.warning(
+            "Disable vector memory for this process because embedding request was rejected "
+            "(model=%s). Set EMBEDDING_ENABLED=false or use an embedding-capable model/gateway. "
+            "Detail: %s",
+            settings.embedding_model,
+            exc,
+        )
+        return None
     except Exception:
         return None
 
