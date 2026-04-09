@@ -54,8 +54,8 @@ class Settings(BaseSettings):
     skills_dir: str = "./skills"
 
     # SQLite
-    db_path: str = "./data/openclaw.db"
-    skill_memory_db: str = ".data/openclaw.db"
+    db_path: str = "./data/superChat.db"
+    skill_memory_db: str = ".data/superChat.db"
     # Agent
     max_tool_rounds: int = 15
 
