@@ -16,15 +16,15 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from config import settings
+from security.input_filter import inspect_external_input
 from gateway.session_manager import SessionManager
 from store.session_store import load_history, clear_history
 
@@ -113,6 +113,10 @@ async def health():
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
     """异步接口：投入队列立即返回，结果通过 SSE 推送。"""
+    scan = inspect_external_input(req.message)
+    if not scan.allowed:
+        raise HTTPException(status_code=400, detail=f"输入风控拦截（score={scan.risk_score}）：{scan.reason}")
+
     mgr = get_manager()
     await mgr.send_to_session(req.session_id, req.message)
     return ChatResponse(session_id=req.session_id)
@@ -139,6 +143,10 @@ async def chat_sync(req: SyncChatRequest):
     sender_id 不为空时用 sender_id 作为 session_id，实现多用户隔离。
     """
     import time
+    scan = inspect_external_input(req.message)
+    if not scan.allowed:
+        raise HTTPException(status_code=400, detail=f"输入风控拦截（score={scan.risk_score}）：{scan.reason}")
+
     mgr = get_manager()
     effective_session = req.sender_id if req.sender_id else req.session_id
     await mgr.ensure_session(effective_session, role="main")

@@ -18,9 +18,14 @@
 - **同步接口**：`POST /chat/sync` 可直接等待最终回复，便于机器人类调用方使用。  
 - **多 Agent 协作**：主 Agent 负责调度，子 Agent 分工执行（规划、知识检索、命令执行）。  
 - **SQLite 持久化**：会话、消息历史、工作区文件（TODO/NOTES/ERRORS）和 agent 路由记录全部落库。  
-- **工具安全控制**：`bash` 工具默认白名单命令 + 黑名单片段校验，并限制 shell 操作符。  
+- **工具安全控制**：`bash` 工具采用命令白名单 + 参数级沙箱校验（参数数量/长度/路径越界检查）并限制 shell 操作符。  
 - **Skill 机制**：自动扫描 `skills/*/SKILL.md` 并注入模型上下文，支持读取 skill 详情和脚本路径。  
 - **飞书 Bot 集成**：使用飞书卡片展示“处理中进度 + 最终回复”，减少长任务超时问题。
+- **网关安全基线**：Gateway 支持 Bearer JWT/OAuth2 认证（可按环境开关）。
+- **输入风控过滤**：在 `/chat` 与 `/chat/sync` 增加外部输入恶意指令检测层。
+- **向量记忆支持**：支持对会话消息做 embedding 入库，并在对话时召回相似记忆。
+- **审计日志**：记录 Agent 决策、委派、工具调用与执行结果，便于事后追溯。
+- **Executor 沙箱隔离**：默认通过 Docker 沙箱执行命令，避免直接操作宿主机。
 
 ---
 
@@ -117,11 +122,27 @@ SGLANG_API_KEY=
 MODELSCOPE_API_TOKEN=
 SGLANG_HEADERS={"Content-Type":"application/json"}
 
+# ===== Gateway 认证（JWT/OAuth2 Bearer） =====
+AUTH_ENABLED=true
+AUTH_JWT_SECRET=change_me
+AUTH_JWT_ALGORITHM=HS256
+AUTH_ISSUER=
+AUTH_AUDIENCE=
+AUTH_REQUIRED_SCOPES=gateway:chat
+AUTH_CLOCK_SKEW_SECONDS=30
+
+# ===== 向量记忆 =====
+EMBEDDING_ENABLED=true
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_SIMILARITY_THRESHOLD=0.75
+EMBEDDING_MAX_MEMORIES=5
+EMBEDDING_MAX_CHARS=2000
+
 # ===== Skills =====
 SKILLS_DIR=./skills
 
 # ===== SQLite =====
-DB_PATH=./data/superChat.db
+DB_PATH=./data/openclaw.db
 
 # ===== Agent =====
 MAX_TOOL_ROUNDS=15
@@ -130,7 +151,15 @@ MAX_TOOL_ROUNDS=15
 BASH_ALLOWED_COMMANDS=python,python3,pip,pip3,uv,pytest,ls,pwd,cat,head,tail,sed,awk,rg,find,echo,git,cp,mv,mkdir,touch
 BASH_BLOCKED_PATTERNS=rm -rf,shutdown,reboot,poweroff,:(){,mkfs,dd if=,/etc/passwd,chmod 777,> /dev/sda,curl | sh,wget | sh
 BASH_ALLOW_SHELL_OPERATORS=false
+BASH_MAX_ARGS=24
+BASH_MAX_ARG_LENGTH=256
 BASH_WORKSPACE_ROOT=.
+
+# ===== Executor 沙箱 =====
+EXECUTOR_SANDBOX_MODE=docker
+EXECUTOR_SANDBOX_IMAGE=python:3.11-alpine
+EXECUTOR_SANDBOX_NETWORK=none
+EXECUTOR_SANDBOX_WORKDIR=/workspace
 ```
 
 ### 5.2 飞书 Bot 配置（`lark_bot/config.py`）
@@ -177,6 +206,29 @@ python cli.py reset demo
 ```bash
 cd lark_bot
 python bot.py
+```
+
+
+### 6.4 一键安全验收脚本
+
+```bash
+AUTH_JWT_SECRET=CHANGE_ME_IN_PROD ./scripts/verify_security_stack.sh
+```
+
+脚本会按顺序验证：输入风控、审计日志写入、向量记忆写入、Executor 沙箱执行；并自动识别网关是否启用鉴权：
+
+- 若 `/health` 返回 `401`：按鉴权模式继续（自动签发测试 token 并校验 bearer 访问）。
+- 若 `/health` 返回 `200`：按无鉴权模式继续（给出 warning，但不失败）。
+
+常用参数：
+
+```bash
+BASE_URL=http://localhost:8000 \
+DB_PATH=./data/openclaw.db \
+SESSION_ID=verify-main \
+EMBEDDING_SESSION_ID=verify-memory \
+AUTH_JWT_SECRET=CHANGE_ME_IN_PROD \
+./scripts/verify_security_stack.sh
 ```
 
 ---
@@ -229,6 +281,8 @@ SQLite 主要表：
 - `workspace`：每个 session 的 TODO / NOTES / SUMMARY / ERRORS；
 - `agent_messages`：Agent 间消息审计记录；
 - `skill_memory`：Skill 成功命令记忆。
+- `vector_memories`：向量嵌入记忆与相似召回。
+- `audit_logs`：Agent 决策/执行审计日志。
 
 `store/session_store.py` 使用 **每 session 单写连接 + 队列串行写入**，显著降低并发场景下 SQLite 锁冲突。
 
@@ -260,6 +314,8 @@ skills/my-skill/
 - **bash 命令被拒绝**：检查是否命中白名单限制或黑名单片段。  
 - **SQLite database is locked**：确认是否使用本项目提供的写入路径，避免外部并发直写。  
 - **飞书群里机器人无响应**：检查 `GROUP_AT_ONLY=true` 时是否正确 @ 机器人。
+- **接口返回 401/403**：确认是否携带 Bearer JWT、issuer/audience 与 scope 满足网关校验。
+- **消息被风控拦截**：检查输入是否包含高风险注入或危险命令模式。
 
 ---
 

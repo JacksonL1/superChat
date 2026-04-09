@@ -25,4 +25,3 @@ data/openclaw.db
 /models/__pycache__
 /.idea
 .env
-/security/__pycache__

@@ -27,6 +27,27 @@ class Settings(BaseSettings):
         """
         return (self.sglang_api_key or self.modelscope_api_token or "EMPTY").strip()
 
+
+    # Gateway 认证（JWT / OAuth2 Bearer）
+    # 生产环境建议保持开启，禁止基于本地来源自动信任。
+    auth_enabled: bool = False
+    auth_jwt_secret: str = "CHANGE_ME_IN_PROD"
+    auth_jwt_algorithm: str = "HS256"
+    auth_issuer: str = ""
+    auth_audience: str = ""
+    auth_required_scopes: str = "gateway:chat"
+    auth_clock_skew_seconds: int = 30
+
+    # 服务端自身调用 Gateway 时使用的 Bearer Token（CLI / 内部集成）
+    gateway_access_token: str = ""
+
+    # 向量记忆
+    embedding_enabled: bool = True
+    embedding_model: str = "text-embedding-3-small"
+    embedding_similarity_threshold: float = 0.75
+    embedding_max_memories: int = 5
+    embedding_max_chars: int = 2000
+
     # Skills
     skills_dir: str = "./skills"
 

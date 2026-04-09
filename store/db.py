@@ -61,6 +61,30 @@ CREATE TABLE IF NOT EXISTS agent_messages (
     replied_at   TEXT
 );
 
+
+-- 审计日志：Agent 决策与执行路径
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id  TEXT NOT NULL,
+    event_type  TEXT NOT NULL,
+    detail      TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'ok',
+    meta        TEXT NOT NULL DEFAULT '{}',
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_audit_session_time ON audit_logs(session_id, created_at);
+
+-- 向量记忆（简化版：SQLite + JSON embedding）
+CREATE TABLE IF NOT EXISTS vector_memories (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id  TEXT NOT NULL,
+    role        TEXT NOT NULL,
+    content     TEXT NOT NULL,
+    embedding   TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_vm_session_time ON vector_memories(session_id, created_at);
+
 -- Skill 历史成功命令（skills.memory 模块使用）
 -- 与 skills/memory.py 的 schema 完全一致
 CREATE TABLE IF NOT EXISTS skill_memory (
