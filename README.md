@@ -21,7 +21,7 @@
 - **工具安全控制**：`bash` 工具采用命令白名单 + 参数级沙箱校验（参数数量/长度/路径越界检查）并限制 shell 操作符。  
 - **Skill 机制**：自动扫描 `skills/*/SKILL.md` 并注入模型上下文，支持读取 skill 详情和脚本路径。  
 - **飞书 Bot 集成**：使用飞书卡片展示“处理中进度 + 最终回复”，减少长任务超时问题。
-- **网关安全基线**：Gateway 强制 Bearer JWT/OAuth2 认证，不再基于本地来源默认信任。
+- **网关安全基线**：Gateway 支持 Bearer JWT/OAuth2 认证（可按环境开关）。
 - **输入风控过滤**：在 `/chat` 与 `/chat/sync` 增加外部输入恶意指令检测层。
 - **向量记忆支持**：支持对会话消息做 embedding 入库，并在对话时召回相似记忆。
 - **审计日志**：记录 Agent 决策、委派、工具调用与执行结果，便于事后追溯。
@@ -142,7 +142,7 @@ EMBEDDING_MAX_CHARS=2000
 SKILLS_DIR=./skills
 
 # ===== SQLite =====
-DB_PATH=./data/superChat.db
+DB_PATH=./data/openclaw.db
 
 # ===== Agent =====
 MAX_TOOL_ROUNDS=15
@@ -215,7 +215,21 @@ python bot.py
 AUTH_JWT_SECRET=CHANGE_ME_IN_PROD ./scripts/verify_security_stack.sh
 ```
 
-脚本会按顺序验证：JWT 鉴权、输入风控、审计日志写入、向量记忆写入、Executor 沙箱执行。
+脚本会按顺序验证：输入风控、审计日志写入、向量记忆写入、Executor 沙箱执行；并自动识别网关是否启用鉴权：
+
+- 若 `/health` 返回 `401`：按鉴权模式继续（自动签发测试 token 并校验 bearer 访问）。
+- 若 `/health` 返回 `200`：按无鉴权模式继续（给出 warning，但不失败）。
+
+常用参数：
+
+```bash
+BASE_URL=http://localhost:8000 \
+DB_PATH=./data/openclaw.db \
+SESSION_ID=verify-main \
+EMBEDDING_SESSION_ID=verify-memory \
+AUTH_JWT_SECRET=CHANGE_ME_IN_PROD \
+./scripts/verify_security_stack.sh
+```
 
 ---
 

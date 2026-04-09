@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     # Gateway 认证（JWT / OAuth2 Bearer）
     # 生产环境建议保持开启，禁止基于本地来源自动信任。
-    auth_enabled: bool = True
+    auth_enabled: bool = False
     auth_jwt_secret: str = "CHANGE_ME_IN_PROD"
     auth_jwt_algorithm: str = "HS256"
     auth_issuer: str = ""

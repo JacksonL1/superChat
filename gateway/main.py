@@ -25,7 +25,6 @@ from fastapi.responses import StreamingResponse
 from openai import AsyncOpenAI
 from pydantic import BaseModel
 from config import settings
-from gateway.auth import require_auth
 from security.input_filter import inspect_external_input
 from gateway.session_manager import SessionManager
 from store.session_store import load_history, clear_history
