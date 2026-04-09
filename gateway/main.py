@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             api_key=api_key,
             base_url=settings.sglang_base_url,
         )
-    if api_key == "EMPTY":
+    elif "X-TC-Project" in headers:
         client = AsyncOpenAI(
             api_key=api_key,
             base_url=settings.sglang_base_url,
