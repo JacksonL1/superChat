@@ -37,6 +37,8 @@ from store.session_store import (
 )
 from store.workspace import write_workspace_file
 from store.session_store import list_sessions
+from store.audit import log_audit_event
+from store.vector_memory import build_embedding, recall_memories, record_memory
 
 log = logging.getLogger(__name__)
 
@@ -135,15 +137,18 @@ class AgentLoop:
         """处理一条入站消息，执行 LLM 循环，生成回复。"""
         log.info(f"[{self.session_id}({self.role})] ← [{incoming.from_session}] | {incoming.content}")
 
+        await log_audit_event(self.session_id, "message_received", incoming.content, meta={"from": incoming.from_session, "role": self.role})
+
         # 子 Agent 收到空任务直接快速失败，不进入 LLM 循环
         if self.role != "main" and not incoming.content.strip():
             log.warning(f"[{self.session_id}] 收到空任务，跳过")
             if incoming.should_reply():
                 reply = incoming.make_reply("FAILED: 收到空任务，请提供具体指令。")
                 await self.bus.deliver_reply(reply)
+                await log_audit_event(self.session_id, "empty_task", incoming.content, status="rejected")
             return
 
-        system_content = self._build_system_prompt()
+        system_content = await self._build_system_prompt(incoming.content)
         system_msg     = {"role": "system", "content": system_content}
 
         if self.role == "main":
@@ -176,6 +181,13 @@ class AgentLoop:
         # 4. 持久化最终回复（fire-and-forget，不阻塞回复推送）
         reply_msg = {"role": "assistant", "content": final_reply}
         asyncio.create_task(append_message(self.session_id, reply_msg))
+        await log_audit_event(self.session_id, "final_reply", final_reply, meta={"role": self.role})
+
+        # 向量记忆：记录 user / assistant 内容
+        user_emb = await build_embedding(self.client, incoming.content)
+        await record_memory(self.session_id, "user", incoming.content, user_emb)
+        ans_emb = await build_embedding(self.client, final_reply)
+        await record_memory(self.session_id, "assistant", final_reply, ans_emb)
 
         # 5. 回复给发送方（如果需要）
         if incoming.should_reply():
@@ -270,6 +282,7 @@ class AgentLoop:
 
                 fn_name = tc.function.name
                 log.info(f"[{self.session_id}] CALL {fn_name} | args={tc.function.arguments}")
+                await log_audit_event(self.session_id, "tool_call", tc.function.arguments, meta={"tool": fn_name})
 
                 # 推给前端：告知正在调用哪个工具
                 if self.announce_callback:
@@ -303,6 +316,7 @@ class AgentLoop:
                     )
 
                 log.info(f"[{self.session_id}] RESULT {fn_name} | {repr(result)}")
+                await log_audit_event(self.session_id, "tool_result", str(result), meta={"tool": fn_name})
                 tool_msg = {"role": "tool", "tool_call_id": tc.id, "content": result}
                 messages.append(tool_msg)
                 asyncio.create_task(append_message(self.session_id, tool_msg))
@@ -334,6 +348,7 @@ class AgentLoop:
                 return f"ERROR: 无法创建子 Agent 会话 {target_session}: {e}"
 
         log.info(f"[{self.session_id}] -> [{target_session}] task={repr(message)}")
+        await log_audit_event(self.session_id, "delegate_task", message, meta={"to": target_session})
 
         flags = Flags.NONE
         if not announce:
@@ -365,6 +380,7 @@ class AgentLoop:
             return f"ERROR: [{target_session}] 未在超时时间内回复"
 
         log.info(f"[{self.session_id}] ← [{target_session}]: {reply.content}")
+        await log_audit_event(self.session_id, "delegate_result", reply.content, meta={"from": target_session})
         return reply.content
 
     def _resolve_target_session(self, requested: str) -> tuple[str, str | None]:
@@ -393,7 +409,7 @@ class AgentLoop:
 
     # ── 辅助 ──────────────────────────────────────────────────────
 
-    def _build_system_prompt(self) -> str:
+    async def _build_system_prompt(self, query_text: str = "") -> str:
         builder = ROLE_PROMPT_BUILDERS.get(self.role)
         if builder is None:
             return f"你是 Agent [{self.session_id}]，角色：{self.role}"
@@ -405,14 +421,23 @@ class AgentLoop:
         try:
             from skills.loader import build_skills_xml, scan_skills
             from skills.memory import build_all_memory_hints
-            skills      = scan_skills()
-            skills_xml  = build_skills_xml(skills)
+
+            skills = scan_skills()
+            skills_xml = build_skills_xml(skills)
             skill_names = [s["name"] for s in skills]
             memory_hint = build_all_memory_hints(skill_names)
+
+            # 向量记忆召回
+            query = query_text or f"session={self.session_id} role={self.role}"
+            query_emb = await build_embedding(self.client, query)
+            recalled = await recall_memories(self.session_id, query_emb)
+            if recalled:
+                memory_hint += "\n\n## 向量记忆召回\n" + "\n".join(f"- {x}" for x in recalled)
+
             log.info(f"[{self.session_id}] skills loaded: {len(skills)}")
         except Exception as e:
             log.error(f"[{self.session_id}] skills.loader 失败: {e}", exc_info=True)
-            skills_xml  = ""
+            skills_xml = ""
             memory_hint = ""
 
         return builder(self.session_id, skills_xml=skills_xml, memory_hint=memory_hint)

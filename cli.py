@@ -17,10 +17,17 @@ import os
 import httpx
 import argparse
 
+from config import settings
+
 # 添加项目根目录到 Python 路径
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '')))
 
 GATEWAY_URL = "http://localhost:8000"
+
+
+def _auth_headers() -> dict:
+    token = (settings.gateway_access_token or "").strip()
+    return {"Authorization": f"Bearer {token}"} if token else {}
 
 
 # ════════════════════════════════════════════════════════════════
@@ -31,11 +38,12 @@ async def cmd_chat(message: str, session_id: str = "main") -> None:
     """发消息，通过 SSE 实时打印输出直到收到完整回复。"""
     async with httpx.AsyncClient(timeout=300) as client:
         # 先订阅 SSE，避免非常快的回复在订阅前丢失
-        async with client.stream("GET", f"{GATEWAY_URL}/stream/{session_id}") as stream:
+        async with client.stream("GET", f"{GATEWAY_URL}/stream/{session_id}", headers=_auth_headers()) as stream:
             # 投递消息
             resp = await client.post(
                 f"{GATEWAY_URL}/chat",
                 json={"message": message, "session_id": session_id},
+                headers=_auth_headers(),
             )
             resp.raise_for_status()
             print(f"[queued → {session_id}]")
@@ -69,7 +77,7 @@ async def cmd_chat(message: str, session_id: str = "main") -> None:
 
 async def cmd_sessions() -> None:
     async with httpx.AsyncClient() as client:
-        resp = await client.get(f"{GATEWAY_URL}/sessions")
+        resp = await client.get(f"{GATEWAY_URL}/sessions", headers=_auth_headers())
         resp.raise_for_status()
         sessions = resp.json()
         print(f"{'ID':<20} {'ROLE':<12} {'STATUS':<10} CREATED")
@@ -80,7 +88,7 @@ async def cmd_sessions() -> None:
 
 async def cmd_history(session_id: str = "main") -> None:
     async with httpx.AsyncClient() as client:
-        resp = await client.get(f"{GATEWAY_URL}/sessions/{session_id}/history")
+        resp = await client.get(f"{GATEWAY_URL}/sessions/{session_id}/history", headers=_auth_headers())
         resp.raise_for_status()
         data = resp.json()
         msgs = data.get("messages", [])
@@ -93,7 +101,7 @@ async def cmd_history(session_id: str = "main") -> None:
 
 async def cmd_reset(session_id: str = "main") -> None:
     async with httpx.AsyncClient() as client:
-        resp = await client.post(f"{GATEWAY_URL}/sessions/{session_id}/reset")
+        resp = await client.post(f"{GATEWAY_URL}/sessions/{session_id}/reset", headers=_auth_headers())
         resp.raise_for_status()
         print(f"✅ {session_id} history cleared")
 

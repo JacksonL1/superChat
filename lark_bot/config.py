@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     # SuperChat 服务地址
     superchat_url:   str = "http://localhost:8000"
 
+    # SuperChat 网关 Bearer Token（用于 JWT/OAuth2 认证）
+    superchat_access_token: str = ""
+
     # Agent 默认参数
     agent_id:        str = "cmg-bot"
     workspace_id:    str = "CMG"

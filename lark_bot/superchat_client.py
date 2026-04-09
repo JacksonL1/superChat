@@ -25,6 +25,10 @@ class SuperChatClient:
         self.base_url = settings.superchat_url.rstrip("/")
         self.timeout  = settings.request_timeout
 
+    def _auth_headers(self) -> dict:
+        token = (settings.superchat_access_token or "").strip()
+        return {"Authorization": f"Bearer {token}"} if token else {}
+
     def chat_stream(
         self,
         message:     str,
@@ -49,6 +53,7 @@ class SuperChatClient:
                 f"{self.base_url}/chat",
                 json={"message": message, "session_id": effective_session},
                 timeout=10,
+                headers=self._auth_headers(),
             )
             resp.raise_for_status()
         except Exception as e:
@@ -62,6 +67,7 @@ class SuperChatClient:
                 f"{self.base_url}/stream/{effective_session}",
                 stream=True,
                 timeout=self.timeout,
+                headers=self._auth_headers(),
             ) as stream:
                 for line in stream.iter_lines(decode_unicode=True):
                     if not line or not line.startswith("data:"):
