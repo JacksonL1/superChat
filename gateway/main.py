@@ -16,7 +16,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
@@ -103,7 +102,7 @@ class ChatResponse(BaseModel):
 # ════════════════════════════════════════════════════════════════
 
 @app.get("/health")
-async def health(_claims: dict = Depends(require_auth)):
+async def health():
     mgr = get_manager()
     return {
         "status": "ok",
@@ -112,7 +111,7 @@ async def health(_claims: dict = Depends(require_auth)):
 
 
 @app.post("/chat", response_model=ChatResponse)
-async def chat(req: ChatRequest, _claims: dict = Depends(require_auth)):
+async def chat(req: ChatRequest):
     """异步接口：投入队列立即返回，结果通过 SSE 推送。"""
     scan = inspect_external_input(req.message)
     if not scan.allowed:
@@ -137,7 +136,7 @@ class SyncChatResponse(BaseModel):
 
 
 @app.post("/chat/sync", response_model=SyncChatResponse)
-async def chat_sync(req: SyncChatRequest, _claims: dict = Depends(require_auth)):
+async def chat_sync(req: SyncChatRequest):
     """
     同步接口：发消息后阻塞等待 AgentLoop 完成，直接返回回复文字。
     飞书 bot 等需要同步回复的调用方使用此接口。
@@ -207,7 +206,7 @@ async def chat_sync(req: SyncChatRequest, _claims: dict = Depends(require_auth))
 
 
 @app.get("/stream/{session_id}")
-async def stream(session_id: str, request: Request, _claims: dict = Depends(require_auth)):
+async def stream(session_id: str, request: Request):
     """
     SSE 订阅：实时接收 session 的输出。
     每条 SSE 事件格式：data: {"session_id": "...", "text": "...", "progress": bool}
@@ -242,18 +241,18 @@ async def stream(session_id: str, request: Request, _claims: dict = Depends(requ
 
 
 @app.get("/sessions")
-async def get_sessions(_claims: dict = Depends(require_auth)):
+async def get_sessions():
     mgr = get_manager()
     return await mgr.get_all_sessions()
 
 
 @app.get("/sessions/{session_id}/history")
-async def get_history(session_id: str, _claims: dict = Depends(require_auth)):
+async def get_history(session_id: str):
     history = await load_history(session_id)
     return {"session_id": session_id, "messages": history}
 
 
 @app.post("/sessions/{session_id}/reset")
-async def reset_session(session_id: str, _claims: dict = Depends(require_auth)):
+async def reset_session(session_id: str):
     await clear_history(session_id)
     return {"session_id": session_id, "status": "reset"}
