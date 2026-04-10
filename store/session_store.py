@@ -139,6 +139,42 @@ async def set_session_status(session_id: str, status: str) -> None:
     await w.write(_do)
 
 
+async def get_session_meta(session_id: str) -> dict[str, Any]:
+    s = await get_session(session_id)
+    if not s:
+        return {}
+    raw = (s.get("meta") or "{}").strip()
+    try:
+        obj = json.loads(raw)
+        return obj if isinstance(obj, dict) else {}
+    except Exception:
+        return {}
+
+
+async def set_session_meta(session_id: str, meta: dict[str, Any]) -> None:
+    """覆盖写入 sessions.meta（JSON dict）。"""
+    w = await get_writer(session_id)
+    meta_json = json.dumps(meta or {}, ensure_ascii=False)
+
+    async def _do(conn):
+        await conn.execute(
+            "UPDATE sessions SET meta=?, updated_at=datetime('now') WHERE id=?",
+            (meta_json, session_id),
+        )
+    await w.write(_do)
+
+
+async def patch_session_meta(session_id: str, patch: dict[str, Any]) -> dict[str, Any]:
+    """读取 meta dict，合并 patch 后写回，返回新 meta。"""
+    current = await get_session_meta(session_id)
+    if not isinstance(current, dict):
+        current = {}
+    if patch:
+        current.update(patch)
+    await set_session_meta(session_id, current)
+    return current
+
+
 # ════════════════════════════════════════════════════════════════
 # Message 历史
 # ════════════════════════════════════════════════════════════════

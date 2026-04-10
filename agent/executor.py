@@ -26,6 +26,10 @@ from skills.loader import load_skill_content  # 保留原有 skill 加载
 from config import settings
 from store.audit import log_audit_event
 
+_APPROVAL_PREFIX = "NEED_BASH_APPROVAL:"
+_TEMP_ALLOWED: dict[str, set[str]] = {}
+_DYNAMIC_ALLOWLIST_PATH = Path("./data/dynamic_bash_allowlist.json")
+
 
 async def execute_tool(name: str, args: dict, session_id: str) -> str:
     """
@@ -52,7 +56,7 @@ async def execute_tool(name: str, args: dict, session_id: str) -> str:
         if sys.platform == "win32":
             command = re.sub(r"\bpython3\b", "python", command)
 
-        check_error = _validate_bash_command(command)
+        check_error = _validate_bash_command(command, session_id=session_id)
         if check_error:
             return f"ERROR: {check_error}"
 
@@ -226,8 +230,12 @@ def _validate_bash_arguments(parts: list[str]) -> str | None:
     return None
 
 
-def _validate_bash_command(command: str) -> str | None:
-    """命令层白名单与沙箱策略检查。返回错误文案或 None。"""
+def _validate_bash_command(command: str, session_id: str | None = None) -> str | None:
+    """命令层白名单与沙箱策略检查。返回错误文案或 None。
+
+    当命令入口不在白名单时，返回可被上层识别的 NEED_BASH_APPROVAL 前缀，
+    由主循环向用户问询“仅本次/永久允许”。
+    """
     if not command:
         return "命令为空"
 
@@ -254,12 +262,72 @@ def _validate_bash_command(command: str) -> str | None:
         return "命令为空"
 
     entry = Path(parts[0]).name.lower()
-    allowed = {
+    allowed = _build_allowed_entries(session_id=session_id)
+    if entry not in allowed:
+        # 交由上层（AgentLoop）问询用户是否允许
+        return f"{_APPROVAL_PREFIX} entry={entry} command={command}"
+
+    return None
+
+
+def _build_allowed_entries(session_id: str | None = None) -> set[str]:
+    static_allowed = {
         c.strip().lower()
         for c in settings.bash_allowed_commands.split(",")
         if c.strip()
     }
-    if entry not in allowed:
-        return f"命令 '{entry}' 不在白名单中"
+    dynamic_allowed = _load_dynamic_allowlist()
+    temp_allowed = set()
+    if session_id:
+        temp_allowed = _TEMP_ALLOWED.get(session_id, set())
+    return static_allowed | dynamic_allowed | temp_allowed
 
-    return None
+
+def temp_allowlist_add(session_id: str, entry: str) -> None:
+    entry = (entry or "").strip().lower()
+    if not entry:
+        return
+    _TEMP_ALLOWED.setdefault(session_id, set()).add(entry)
+
+
+def temp_allowlist_clear(session_id: str) -> None:
+    _TEMP_ALLOWED.pop(session_id, None)
+
+
+def add_dynamic_allowlist_entry(entry: str) -> None:
+    """持久化添加到动态白名单（跨进程/重启生效）。"""
+    entry = (entry or "").strip().lower()
+    if not entry:
+        return
+    s = _load_dynamic_allowlist()
+    if entry in s:
+        return
+    s.add(entry)
+    _save_dynamic_allowlist(s)
+
+
+def _load_dynamic_allowlist() -> set[str]:
+    try:
+        if not _DYNAMIC_ALLOWLIST_PATH.exists():
+            return set()
+        raw = _DYNAMIC_ALLOWLIST_PATH.read_text(encoding="utf-8", errors="replace")
+        obj = json.loads(raw or "{}")
+        # 支持两种格式：{"allowed": [...]} 或 直接是 [...]
+        if isinstance(obj, dict):
+            arr = obj.get("allowed", [])
+        else:
+            arr = obj
+        if not isinstance(arr, list):
+            return set()
+        return {str(x).strip().lower() for x in arr if str(x).strip()}
+    except Exception:
+        return set()
+
+
+def _save_dynamic_allowlist(allowed: set[str]) -> None:
+    _DYNAMIC_ALLOWLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"allowed": sorted(allowed)}
+    _DYNAMIC_ALLOWLIST_PATH.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
