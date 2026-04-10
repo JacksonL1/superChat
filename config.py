@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     gateway_access_token: str = ""
 
     # 向量记忆
-    embedding_enabled: bool = True
+    embedding_enabled: bool = False
     embedding_model: str = "text-embedding-3-small"
     embedding_similarity_threshold: float = 0.75
     embedding_max_memories: int = 5
@@ -74,6 +74,7 @@ class Settings(BaseSettings):
     # bash 工具执行目录根（相对项目根）
     bash_workspace_root: str = "."
     bash_max_args: int = 64
+    bash_max_arg_length: int = 64
 
     class Config:
         env_file = ".env"
