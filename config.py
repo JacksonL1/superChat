@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     executor_sandbox_workdir: str = "/workspace"
 
     # bash 参数校验策略
-    bash_max_args: int = 24
+    bash_max_args: int = 128
     bash_max_arg_length: int = 256
     bash_workspace_root: str = "."
 
