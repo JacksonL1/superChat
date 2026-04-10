@@ -69,12 +69,19 @@ class Settings(BaseSettings):
         "rm -rf,shutdown,reboot,poweroff,:(){,mkfs,dd if=,/etc/passwd,"
         "chmod 777,> /dev/sda"
     )
+
     # 是否允许 shell 操作符（如 &&、|、>、; 等）。默认关闭。
     bash_allow_shell_operators: bool = True
-    # bash 工具执行目录根（相对项目根）
+    # Executor 沙箱策略（默认 docker，避免直接操作宿主机）
+    executor_sandbox_mode: str = "host"  # docker | host
+    executor_sandbox_image: str = "python:3.11-alpine"
+    executor_sandbox_network: str = "none"
+    executor_sandbox_workdir: str = "/workspace"
+
+    # bash 参数校验策略
+    bash_max_args: int = 24
+    bash_max_arg_length: int = 256
     bash_workspace_root: str = "."
-    bash_max_args: int = 64
-    bash_max_arg_length: int = 64
 
     class Config:
         env_file = ".env"
