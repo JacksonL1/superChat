@@ -26,3 +26,4 @@ data/openclaw.db
 /.idea
 .env
 /security/__pycache__
+/skills/doubao-chat

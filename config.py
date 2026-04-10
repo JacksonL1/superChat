@@ -73,6 +73,7 @@ class Settings(BaseSettings):
     bash_allow_shell_operators: bool = True
     # bash 工具执行目录根（相对项目根）
     bash_workspace_root: str = "."
+    bash_max_args: int = 64
 
     class Config:
         env_file = ".env"
